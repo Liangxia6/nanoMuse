@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { TaskRunner, frame, preview, textOf } from '../lib/task.js'
+import { apply as applyReach } from '../lib/reach.js'
 
 /** The slice of a dsh Context the runner touches. */
 function fakeContext() {
@@ -83,6 +84,75 @@ function runner(h) {
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+/** Exercise the registered sender tool and the receiving runner together. */
+function delegation(h, r) {
+  const tools = new Map()
+  const calls = []
+  const replies = []
+  const destination = { id: 'desk', name: 'Desk', kind: 'computer', online: true }
+  const hub = {
+    connected: true,
+    deviceId: 'source-1',
+    devices: [destination],
+    find: () => destination,
+    nextId: () => `call-${calls.length + 1}`,
+    async call(to, action, args, options) {
+      calls.push({ to, action, args })
+      const pending = r.task(args, fakeCall(options.id, { id: this.deviceId, name: 'Source', kind: 'computer' }))
+      await tick()
+      const agent = [...h.agents.values()].find((a) => a.status === 'running')
+      agent.status = 'idle'
+      h.emit(agent.id, 'turn/end', { reason: { kind: 'completed' } })
+      const reply = await pending
+      replies.push(reply)
+      return reply
+    },
+  }
+  applyReach({
+    nanomuseCloud: { hub, signedIn: true },
+    tools: { register(tool) { tools.set(tool.name, tool); return () => {} } },
+    effect(fn) { fn() },
+    inject() {},
+    get(name) { return name === 'nanomuseRooms' ? { lang: 'en' } : undefined },
+  })
+  const send = (sessionId, task) => tools.get('delegate').execute(
+    { device: 'Desk', task },
+    { agent: sessionId === undefined ? undefined : { session: { id: sessionId } }, signal: new AbortController().signal },
+  )
+  return { hub, calls, replies, send }
+}
+
+test('desktop delegation isolates chats and devices while continuing the same chat', async (t) => {
+  const h = fakeContext()
+  const { r, off } = runner(h)
+  t.after(off)
+  const d = delegation(h, r)
+  await d.send('chat-a', 'first task in A')
+  await d.send('chat-b', 'first task in B')
+  await d.send('chat-a', 'continue A')
+  d.hub.deviceId = 'source-2'
+  await d.send('chat-a', 'A on another device')
+
+  assert.deepEqual(d.replies.map((reply) => reply.thread), ['session-1', 'session-2', 'session-1', 'session-3'])
+  assert.deepEqual(d.calls.map((call) => call.args.conversation), ['chat-a', 'chat-b', 'chat-a', 'chat-a'])
+  assert.equal(h.ctx.sessionController.created.length, 3)
+  assert.deepEqual([...h.agents.values()].map((agent) => agent.sent.map((msg) => msg.content[0].text.split('\n').at(-1))), [
+    ['first task in A', 'continue A'], ['first task in B'], ['A on another device'],
+  ])
+})
+
+test('desktop delegation without a source chat refuses before sending a task', async (t) => {
+  const h = fakeContext()
+  const { r, off } = runner(h)
+  t.after(off)
+  const d = delegation(h, r)
+  for (const sessionId of [undefined, '', '   ']) {
+    await assert.rejects(d.send(sessionId, 'a task'), /source conversation/)
+  }
+  assert.equal(d.calls.length, 0)
+  assert.equal(h.ctx.sessionController.created.length, 0)
+})
 
 test('frame, textOf and preview', () => {
   assert.ok(frame('Phone', 'Desk', 'tidy up').startsWith('[Asked from Phone'))
