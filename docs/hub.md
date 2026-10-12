@@ -40,6 +40,7 @@ In the web console (`/app`): pick a device, type. The task runs on that
 device's Muse; approvals show as cards in the page.
 
 Desktop `delegate` requests carry the source chat's id as `conversation`.
+If that id is missing or invalid, the task is refused before it is sent.
 On the target, tasks from different source chats stay in separate conversations;
 another task from the same chat on the same source device continues its conversation.
 After upgrading, the first delegation from each chat starts a separate conversation

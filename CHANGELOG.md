@@ -26,7 +26,7 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### Desktop
 
-- **Delegated tasks from different desktop chats no longer share a remote conversation.** The desktop now sends the source chat's id with each task, so returning to the same chat continues its remote conversation while a different chat starts separately. Previously, every chat on one desktop reused the target's default conversation for that device. For #395.
+- **Delegated tasks from different desktop chats no longer share a remote conversation.** The desktop now sends the source chat's id with each task, so returning to the same chat continues its remote conversation while a different chat starts separately. Previously, every chat on one desktop reused the target's default conversation for that device. Tasks with missing or invalid source chat IDs were rejected before being sent. For #395.
 - **A clip of your own with a fragmented layout is read right, and the connector sheet's Chinese title has its space.** A fragmented MP4 whose 64-bit movie header says "unknown" for the length was refused as too long instead of being read from its `mehd` box; it is now read like the 32-bit case. The sheet that connects a service reads 连接 Notion rather than 连接Notion in Chinese. The desktop shell's own tests now run in the desktop workflow on every platform and pass on a Windows checkout with CRLF line ends ([#383](https://github.com/nano-muse/nanoMuse/pull/383)).
 
 ### Android
